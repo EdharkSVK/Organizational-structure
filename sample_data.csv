@@ -1,0 +1,11 @@
+employee_id,employee_name,reports_to_id,department_name,subsidiary_name,job_title,location,employment_type,fte
+1,CEO,,"Executive Office",Group,CEO,HQ,Employee,1
+2,VP Engineering,1,Engineering,TechSub,VP Eng,HQ,Employee,1
+3,VP Sales,1,Sales,SalesSub,VP Sales,NY,Employee,1
+4,Engineering Manager,2,Engineering,TechSub,EM,HQ,Employee,1
+5,Senior Engineer,4,Engineering,TechSub,Senior Dev,HQ,Employee,1
+6,Junior Engineer,4,Engineering,TechSub,Junior Dev,HQ,Employee,1
+7,Sales Manager,3,Sales,SalesSub,Sales Mgr,NY,Employee,1
+8,Sales Rep,7,Sales,SalesSub,Rep,NY,Employee,1
+9,Intern,4,Engineering,TechSub,Intern,HQ,Intern,0.5
+10,Contractor,2,Engineering,TechSub,Contractor,Remote,Contractor,1
