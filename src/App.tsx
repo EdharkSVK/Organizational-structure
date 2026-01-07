@@ -2,11 +2,17 @@ import { AppShell } from './components/layout/AppShell';
 import { useStore } from './data/store';
 import { OrgChartView } from './components/views/OrgChartView';
 import { LayeredCircleView } from './components/views/LayeredCircleView';
+import { UploadWizard } from './components/features/UploadWizard';
 
 function App() {
   const {
-    currentView
+    currentView,
+    isReadyToVisualize
   } = useStore();
+
+  if (!isReadyToVisualize) {
+    return <UploadWizard />;
+  }
 
   return (
     <AppShell>

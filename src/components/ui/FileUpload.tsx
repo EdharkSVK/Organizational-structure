@@ -4,11 +4,16 @@ import { parseData } from '../../data/parser';
 import { FileDown, AlertCircle, FileSpreadsheet, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 
-export const FileUpload: React.FC = () => {
+interface FileUploadProps {
+    variant?: 'dropzone' | 'button' | 'mini';
+}
+
+export const FileUpload: React.FC<FileUploadProps> = ({ variant = 'dropzone' }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const { setFile, setParseResult, setError, setLoading, isLoading, error } = useStore();
+    const { setFile, setParseResult, setError, setLoading, isLoading, error, fileName } = useStore(); // Assuming fileName stored? Or derive from file
     const [isDragOver, setIsDragOver] = useState(false);
 
+    // ... processFile logic ...
     const processFile = async (file: File) => {
         setFile(file);
         setLoading(true);
@@ -24,6 +29,7 @@ export const FileUpload: React.FC = () => {
         }
     };
 
+    // ... handlers ...
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) processFile(file);
@@ -35,6 +41,28 @@ export const FileUpload: React.FC = () => {
         const file = e.dataTransfer.files?.[0];
         if (file) processFile(file);
     };
+
+    if (variant === 'mini') {
+        return (
+            <div>
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept=".csv,.xlsx,.xls"
+                    onChange={handleFileChange}
+                />
+                <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[var(--border-color)] rounded text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-primary)] transition-colors"
+                >
+                    {isLoading ? <Loader2 size={12} className="animate-spin" /> : <FileSpreadsheet size={12} />}
+                    <span className="truncate max-w-[150px]">{fileName || "Choose file"}</span>
+                </button>
+                {error && <div className="absolute top-12 right-4 bg-red-900 text-red-100 text-xs p-2 rounded z-50">{error}</div>}
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col gap-3">
@@ -51,6 +79,7 @@ export const FileUpload: React.FC = () => {
                 onDragLeave={() => setIsDragOver(false)}
                 onDrop={handleDrop}
             >
+                {/* Input */}
                 <input
                     type="file"
                     ref={fileInputRef}
