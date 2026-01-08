@@ -10,63 +10,58 @@ import { Card } from '../ui/card';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { Separator } from '../ui/separator';
-import { cn } from '../../lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const {
         datasetName,
         currentView, setView,
-        scopeType, setScope,
-        selectedSubsidiary, selectedDepartment,
+        selectedLocation, selectedDepartment, setFilter,
         searchQuery, setSearchQuery,
         parseResult,
         setIsReadyToVisualize, // To go back
         socThresholdLow, socThresholdHigh, setSoCThresholds,
+        showGrid, toggleShowGrid,
+        showTooltips, toggleShowTooltips
     } = useStore();
 
 
     // Derived Lists for Dropdowns
-    const { subsidiaries, departments, deptColors, currentCount } = useMemo(() => {
-        if (!parseResult) return { subsidiaries: [], departments: [], deptColors: new Map(), currentCount: 0 };
-        const subs = new Set<string>();
+    const { locations, departments, deptColors, currentCount } = useMemo(() => {
+        if (!parseResult) return { locations: [], departments: [], deptColors: new Map(), currentCount: 0 };
+        const locs = new Set<string>();
         const depts = new Set<string>();
         const colors = new Map<string, string>();
 
-        // Calculate count based on current scope
+        // Calculate count based on current filters
         let count = 0;
 
         parseResult.flatNodes.forEach(node => {
-            if (node.data.subsidiary_name) subs.add(node.data.subsidiary_name);
+            if (node.data.location) locs.add(node.data.location);
+            // Fallback if user used subsidiary column? Let's check both if strictly needed, but user asked for location.
+            // If location is empty, maybe check subsidiary? But let's stick to location as requested.
+
             if (node.data.department_name) {
                 depts.add(node.data.department_name);
                 colors.set(node.data.department_name, node.color || '#ccc');
             }
 
-            // Counting logic
-            if (scopeType === 'group') {
-                count++;
-            } else if (scopeType === 'department' && selectedDepartment) {
-                // Count if in department OR descendant of department head?
-                // For simplicity/perf in this loop, let's just count strict department members
-                // Ideally we'd traverse the subtree, but this is a flat list iteration.
-                // Strict membership match:
-                if (node.data.department_name === selectedDepartment) count++;
-            } else if (scopeType === 'subsidiary' && selectedSubsidiary) {
-                if (node.data.subsidiary_name === selectedSubsidiary) count++;
-            } else {
-                // Fallback for scope selected but value null (All)
+            // Counting logic (AND)
+            const matchesLocation = !selectedLocation || node.data.location === selectedLocation;
+            const matchesDepartment = !selectedDepartment || node.data.department_name === selectedDepartment;
+
+            if (matchesLocation && matchesDepartment) {
                 count++;
             }
         });
 
         return {
-            subsidiaries: Array.from(subs).sort(),
+            locations: Array.from(locs).sort(),
             departments: Array.from(depts).sort(),
             deptColors: colors,
             currentCount: count
         };
-    }, [parseResult, scopeType, selectedDepartment, selectedSubsidiary]);
+    }, [parseResult, selectedLocation, selectedDepartment]);
 
     const handleReset = () => {
         // Simple "Back to Home"
@@ -136,48 +131,32 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                         {/* Filters / Scope */}
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
-                                <Label className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Scope</Label>
+                                <Label className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Filters</Label>
                                 <Badge variant="secondary" className="text-[10px] h-5">{currentCount.toLocaleString()} Nodes</Badge>
                             </div>
 
                             <div className="space-y-2">
-                                {/* Scope Mode Tabs - Simplified as buttons */}
-                                <div className="flex p-1 bg-muted rounded-md ga-1">
-                                    {['group', 'subsidiary', 'department'].map((mode) => (
-                                        <button
-                                            key={mode}
-                                            onClick={() => setScope(mode as any, null)}
-                                            className={cn(
-                                                "flex-1 text-[10px] font-medium py-1 rounded-sm capitalize transition-all",
-                                                scopeType === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                                            )}
-                                        >
-                                            {mode.slice(0, 4)}
-                                        </button>
-                                    ))}
-                                </div>
+                                <Label className="text-[10px] text-muted-foreground uppercase font-bold">Location</Label>
+                                <select
+                                    className="w-full text-xs bg-background border rounded-md p-2"
+                                    value={selectedLocation || ''}
+                                    onChange={(e) => setFilter('location', e.target.value || null)}
+                                >
+                                    <option value="">All Locations</option>
+                                    {locations.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                            </div>
 
-                                {/* Contextual Selects */}
-                                {scopeType === 'subsidiary' && (
-                                    <select
-                                        className="w-full text-xs bg-background border rounded-md p-2"
-                                        value={selectedSubsidiary || ''}
-                                        onChange={(e) => setScope('subsidiary', e.target.value || null)}
-                                    >
-                                        <option value="">All Subsidiaries</option>
-                                        {subsidiaries.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                )}
-                                {scopeType === 'department' && (
-                                    <select
-                                        className="w-full text-xs bg-background border rounded-md p-2"
-                                        value={selectedDepartment || ''}
-                                        onChange={(e) => setScope('department', e.target.value || null)}
-                                    >
-                                        <option value="">All Departments</option>
-                                        {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                                    </select>
-                                )}
+                            <div className="space-y-2">
+                                <Label className="text-[10px] text-muted-foreground uppercase font-bold">Department</Label>
+                                <select
+                                    className="w-full text-xs bg-background border rounded-md p-2"
+                                    value={selectedDepartment || ''}
+                                    onChange={(e) => setFilter('department', e.target.value || null)}
+                                >
+                                    <option value="">All Departments</option>
+                                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
                             </div>
                         </div>
 
@@ -198,11 +177,11 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                             <Label className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Display</Label>
                             <div className="flex items-center justify-between">
                                 <Label htmlFor="show-lines" className="text-xs font-normal">Grid Lines</Label>
-                                <Switch id="show-lines" />
+                                <Switch id="show-lines" checked={showGrid} onCheckedChange={toggleShowGrid} />
                             </div>
                             <div className="flex items-center justify-between">
                                 <Label htmlFor="show-labels" className="text-xs font-normal">Details on Hover</Label>
-                                <Switch id="show-labels" defaultChecked />
+                                <Switch id="show-labels" checked={showTooltips} onCheckedChange={toggleShowTooltips} />
                             </div>
                         </div>
 

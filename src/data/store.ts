@@ -20,8 +20,7 @@ interface AppState {
     currentView: ViewType;
 
     // Scope / Filters
-    scopeType: ScopeType;
-    selectedSubsidiary: string | null;
+    selectedLocation: string | null;
     selectedDepartment: string | null;
     searchQuery: string;
     selectedNodeId: string | null;
@@ -42,14 +41,22 @@ interface AppState {
     setError: (error: string | null) => void;
 
     setView: (view: ViewType) => void;
-    setScope: (scope: ScopeType, value: string | null) => void;
-    setScopeType: (type: ScopeType) => void;
+
+    // Unified Filter Action
+    setFilter: (type: 'location' | 'department', value: string | null) => void;
+
     setSearchQuery: (query: string) => void;
     setSelectedNodeId: (id: string | null) => void;
 
     setSoCThresholds: (low: number, high: number) => void;
     toggleShowAllLines: () => void;
     toggleShowContractors: () => void;
+
+    // New Toggles
+    showGrid: boolean;
+    showTooltips: boolean;
+    toggleShowGrid: () => void;
+    toggleShowTooltips: () => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -63,9 +70,11 @@ export const useStore = create<AppState>((set) => ({
     isReadyToVisualize: false,
 
     currentView: 'chart',
-    scopeType: 'group',
-    selectedSubsidiary: null,
+
+    // Filters
+    selectedLocation: null,
     selectedDepartment: null,
+
     searchQuery: '',
     selectedNodeId: null,
 
@@ -83,16 +92,22 @@ export const useStore = create<AppState>((set) => ({
     setError: (error) => set({ error: error, isLoading: false }),
 
     setView: (view) => set({ currentView: view }),
-    setScope: (scope, value) => {
-        if (scope === 'subsidiary') return set({ scopeType: scope, selectedSubsidiary: value });
-        if (scope === 'department') return set({ scopeType: scope, selectedDepartment: value });
-        return set({ scopeType: 'group', selectedSubsidiary: null, selectedDepartment: null });
+
+    setFilter: (type, value) => {
+        if (type === 'location') return set({ selectedLocation: value });
+        if (type === 'department') return set({ selectedDepartment: value });
     },
-    setScopeType: (type) => set({ scopeType: type }),
+
     setSearchQuery: (query) => set({ searchQuery: query }),
     setSelectedNodeId: (id) => set({ selectedNodeId: id }),
 
     setSoCThresholds: (low, high) => set({ socThresholdLow: low, socThresholdHigh: high }),
     toggleShowAllLines: () => set((state) => ({ showAllLines: !state.showAllLines })),
     toggleShowContractors: () => set((state) => ({ showContractors: !state.showContractors })),
+
+    // New Toggles
+    showGrid: true,
+    showTooltips: true,
+    toggleShowGrid: () => set((state) => ({ showGrid: !state.showGrid })),
+    toggleShowTooltips: () => set((state) => ({ showTooltips: !state.showTooltips })),
 }));

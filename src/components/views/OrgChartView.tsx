@@ -12,7 +12,7 @@ const LEVEL_GAP = 120;
 export const OrgChartView: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const {
-        parseResult, selectedSubsidiary, selectedDepartment, scopeType,
+        parseResult, selectedLocation, selectedDepartment,
         selectedNodeId, setSelectedNodeId
     } = useStore();
 
@@ -32,7 +32,7 @@ export const OrgChartView: React.FC = () => {
         // Determine Effective Root
         let effectiveRootData = parseResult.root;
 
-        if (scopeType === 'department' && selectedDepartment) {
+        if (selectedDepartment) {
             const fullRoot = d3.hierarchy(parseResult.root);
             const heads: d3.HierarchyNode<OrgNode>[] = [];
 
@@ -41,25 +41,6 @@ export const OrgChartView: React.FC = () => {
                 const parentDept = node.parent?.data.data.department_name;
 
                 if (nodeDept === selectedDepartment && parentDept !== selectedDepartment) {
-                    heads.push(node);
-                }
-            });
-
-            if (heads.length > 0) {
-                effectiveRootData = heads[0].data;
-            }
-        } else if (scopeType === 'subsidiary' && selectedSubsidiary) {
-            // Similar logic for subsidiary if needed
-            const fullRoot = d3.hierarchy(parseResult.root);
-            const heads: d3.HierarchyNode<OrgNode>[] = [];
-
-            fullRoot.each(node => {
-                const nodeSub = node.data.data.subsidiary_name;
-                // Subsidiary heads might be tricky if they report to Group CEO. 
-                // Assuming similar "Parent not in Sub" logic.
-                const parentSub = node.parent?.data.data.subsidiary_name;
-
-                if (nodeSub === selectedSubsidiary && parentSub !== selectedSubsidiary) {
                     heads.push(node);
                 }
             });
@@ -83,7 +64,7 @@ export const OrgChartView: React.FC = () => {
         });
         const padding = 100;
         return { root, bounds: { minX: minX - padding, maxX: maxX + padding, minY: minY - padding, maxY: maxY + padding } };
-    }, [parseResult, selectedSubsidiary, selectedDepartment, scopeType]);
+    }, [parseResult, selectedDepartment]);
 
     // Initial Fit
     useEffect(() => {
@@ -215,6 +196,10 @@ export const OrgChartView: React.FC = () => {
 
             const isSelected = selectedNodeId === d.data.id;
             const isHovered = hoveredNode?.data.id === d.data.id;
+            const matchesFilter = !selectedLocation || d.data.data.location === selectedLocation;
+
+            // Visibility (Dimming)
+            ctx.globalAlpha = matchesFilter ? 1.0 : 0.1;
 
             // Shadow
             if (isSelected) {

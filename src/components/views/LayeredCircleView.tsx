@@ -36,8 +36,9 @@ export const LayeredCircleView: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const {
         parseResult, showAllLines, selectedNodeId, setSelectedNodeId,
-        scopeType, selectedDepartment,
-        socThresholdLow, socThresholdHigh
+        selectedLocation, selectedDepartment,
+        socThresholdLow, socThresholdHigh,
+        showGrid, showTooltips
     } = useStore();
 
     // Shared Camera Hook
@@ -56,7 +57,7 @@ export const LayeredCircleView: React.FC = () => {
         // Determine Effective Root
         let effectiveRootData = parseResult.root;
 
-        if (scopeType === 'department' && selectedDepartment) {
+        if (selectedDepartment) {
             // Find the Department Head
             // Defined as: Node in target department whose parent is NOT in target department
             const fullRoot = d3.hierarchy(parseResult.root);
@@ -185,7 +186,7 @@ export const LayeredCircleView: React.FC = () => {
             nodeRadius: FIXED_NODE_R,
             nodeMap
         };
-    }, [parseResult, scopeType, selectedDepartment]);
+    }, [parseResult, selectedDepartment]);
 
     // Helper: Compute Effective Radius
     const getEffectiveRadius = () => {
@@ -338,21 +339,23 @@ export const LayeredCircleView: React.FC = () => {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
 
-        for (let i = 1; i <= levels; i++) {
-            ctx.globalAlpha = isInteracting ? 0.1 : 0.6;
-            ctx.strokeStyle = colors.cardFg;
-            ctx.lineWidth = 1.5 / transform.k;
-            ctx.beginPath();
-            const r = (i / levels) * RADIUS;
-            ctx.arc(0, 0, r, 0, 2 * Math.PI);
-            ctx.stroke();
+        if (showGrid) { // GRID TOGGLE
+            for (let i = 1; i <= levels; i++) {
+                ctx.globalAlpha = isInteracting ? 0.1 : 0.6;
+                ctx.strokeStyle = colors.cardFg;
+                ctx.lineWidth = 1.5 / transform.k;
+                ctx.beginPath();
+                const r = (i / levels) * RADIUS;
+                ctx.arc(0, 0, r, 0, 2 * Math.PI);
+                ctx.stroke();
 
-            const count = layoutData.depthCounts[i] || 0;
-            if (transform.k * r > 50) {
-                ctx.globalAlpha = isInteracting ? 0.2 : 1.0;
-                ctx.fillStyle = colors.cardFg;
-                ctx.font = `700 ${11 / transform.k}px Inter, sans-serif`;
-                ctx.fillText(`L${i}: ${count}`, 0, -r - (4 / transform.k));
+                const count = layoutData.depthCounts[i] || 0;
+                if (transform.k * r > 50) {
+                    ctx.globalAlpha = isInteracting ? 0.2 : 1.0;
+                    ctx.fillStyle = colors.cardFg;
+                    ctx.font = `700 ${11 / transform.k}px Inter, sans-serif`;
+                    ctx.fillText(`L${i}: ${count}`, 0, -r - (4 / transform.k));
+                }
             }
         }
         ctx.strokeStyle = colors.mutedFg;
@@ -432,12 +435,22 @@ export const LayeredCircleView: React.FC = () => {
             const isSelected = selectedNodeId === d.data.id;
             const isHovered = hoveredNode?.data.id === d.data.id;
             const isHighlighted = isInteracting && highlightedIds.has(d.data.id);
+            const matchesFilter = !selectedLocation || d.data.data.location === selectedLocation;
 
             // Visibility logic
             const isRelevant = isSelected || isHovered || isHighlighted;
-            const globalDim = isInteracting && !isRelevant;
 
-            ctx.globalAlpha = globalDim ? 0.1 : 1.0;
+            // Alpha Calculation
+            let alpha = 1.0;
+            if (isInteracting) {
+                // Interaction overrides filter for relevant context
+                alpha = isRelevant ? 1.0 : 0.1;
+            } else {
+                // Resting state: Apply Filter
+                alpha = matchesFilter ? 1.0 : 0.05;
+            }
+
+            ctx.globalAlpha = alpha;
 
             ctx.beginPath();
             const r = d.depth === 0 ? nodeR * 1.5 : nodeR;
@@ -477,7 +490,7 @@ export const LayeredCircleView: React.FC = () => {
 
         ctx.restore();
 
-    }, [transform, layoutData, selectedNodeId, hoveredNode, showAllLines, socThresholdLow, socThresholdHigh]);
+    }, [transform, layoutData, selectedNodeId, hoveredNode, showAllLines, socThresholdLow, socThresholdHigh, showGrid]);
 
     // Input Handling
     const handleMouseMove = (e: React.MouseEvent) => {
@@ -561,7 +574,7 @@ export const LayeredCircleView: React.FC = () => {
                 }
             }}
             uiOverlay={
-                hoveredNode && (
+                showTooltips && hoveredNode && (
                     <Card
                         className="fixed z-50 p-3 shadow-xl pointer-events-none flex flex-col gap-1 backdrop-blur-md bg-popover/95 text-popover-foreground w-64 animate-in fade-in zoom-in-95 duration-200"
                         style={{

@@ -17,7 +17,7 @@ import { cn } from '../../lib/utils';
 type WizardStep = 'UPLOAD' | 'VALIDATING' | 'CONFIGURE';
 
 export const UploadWizard: React.FC = () => {
-    const { setParseResult, setScopeType, setView, setDatasetName, setIsReadyToVisualize } = useStore();
+    const { setParseResult, setView, setDatasetName, setIsReadyToVisualize } = useStore();
     const [step, setStep] = useState<WizardStep>('UPLOAD');
     const [isDragging, setIsDragging] = useState(false);
     const [file, setFile] = useState<File | null>(null);
@@ -31,7 +31,6 @@ export const UploadWizard: React.FC = () => {
 
     // Temp state for config
     const [selectedView, setSelectedView] = useState<'chart' | 'layers'>('chart');
-    const [scope] = useState<'global' | 'subsidiary' | 'department'>('global');
 
     const handleFile = async (uploadedFile: File) => {
         setFile(uploadedFile);
@@ -96,7 +95,6 @@ export const UploadWizard: React.FC = () => {
 
     const handleVisualize = () => {
         setView(selectedView === 'layers' ? 'circle' : 'chart');
-        setScopeType(scope === 'global' ? 'group' : scope);
         setIsReadyToVisualize(true);
     };
 
