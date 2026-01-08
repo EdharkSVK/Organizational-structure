@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useStore } from '../../data/store';
 import { DetailsPanel } from './DetailsPanel';
+import { SoCControls } from './SoCControls';
 import { Layout, Search, Users, Circle, FolderOpen, Maximize, Minus, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -21,17 +22,19 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         searchQuery, setSearchQuery,
         parseResult,
         setIsReadyToVisualize, // To go back
+        socThresholdLow, socThresholdHigh, setSoCThresholds,
     } = useStore();
 
 
-    const stats = parseResult?.stats;
-
     // Derived Lists for Dropdowns
-    const { subsidiaries, departments, deptColors } = useMemo(() => {
-        if (!parseResult) return { subsidiaries: [], departments: [], deptColors: new Map() };
+    const { subsidiaries, departments, deptColors, currentCount } = useMemo(() => {
+        if (!parseResult) return { subsidiaries: [], departments: [], deptColors: new Map(), currentCount: 0 };
         const subs = new Set<string>();
         const depts = new Set<string>();
         const colors = new Map<string, string>();
+
+        // Calculate count based on current scope
+        let count = 0;
 
         parseResult.flatNodes.forEach(node => {
             if (node.data.subsidiary_name) subs.add(node.data.subsidiary_name);
@@ -39,14 +42,31 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 depts.add(node.data.department_name);
                 colors.set(node.data.department_name, node.color || '#ccc');
             }
+
+            // Counting logic
+            if (scopeType === 'group') {
+                count++;
+            } else if (scopeType === 'department' && selectedDepartment) {
+                // Count if in department OR descendant of department head?
+                // For simplicity/perf in this loop, let's just count strict department members
+                // Ideally we'd traverse the subtree, but this is a flat list iteration.
+                // Strict membership match:
+                if (node.data.department_name === selectedDepartment) count++;
+            } else if (scopeType === 'subsidiary' && selectedSubsidiary) {
+                if (node.data.subsidiary_name === selectedSubsidiary) count++;
+            } else {
+                // Fallback for scope selected but value null (All)
+                count++;
+            }
         });
 
         return {
             subsidiaries: Array.from(subs).sort(),
             departments: Array.from(depts).sort(),
-            deptColors: colors
+            deptColors: colors,
+            currentCount: count
         };
-    }, [parseResult]);
+    }, [parseResult, scopeType, selectedDepartment, selectedSubsidiary]);
 
     const handleReset = () => {
         // Simple "Back to Home"
@@ -117,7 +137,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
                                 <Label className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Scope</Label>
-                                <Badge variant="secondary" className="text-[10px] h-5">{stats?.validRows.toLocaleString()} Nodes</Badge>
+                                <Badge variant="secondary" className="text-[10px] h-5">{currentCount.toLocaleString()} Nodes</Badge>
                             </div>
 
                             <div className="space-y-2">
@@ -126,7 +146,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                                     {['group', 'subsidiary', 'department'].map((mode) => (
                                         <button
                                             key={mode}
-                                            onClick={() => setScope(mode as any, mode === 'group' ? null : (mode === 'subsidiary' ? subsidiaries[0] : departments[0]))}
+                                            onClick={() => setScope(mode as any, null)}
                                             className={cn(
                                                 "flex-1 text-[10px] font-medium py-1 rounded-sm capitalize transition-all",
                                                 scopeType === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
@@ -142,8 +162,9 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                                     <select
                                         className="w-full text-xs bg-background border rounded-md p-2"
                                         value={selectedSubsidiary || ''}
-                                        onChange={(e) => setScope('subsidiary', e.target.value)}
+                                        onChange={(e) => setScope('subsidiary', e.target.value || null)}
                                     >
+                                        <option value="">All Subsidiaries</option>
                                         {subsidiaries.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 )}
@@ -151,8 +172,9 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                                     <select
                                         className="w-full text-xs bg-background border rounded-md p-2"
                                         value={selectedDepartment || ''}
-                                        onChange={(e) => setScope('department', e.target.value)}
+                                        onChange={(e) => setScope('department', e.target.value || null)}
                                     >
+                                        <option value="">All Departments</option>
                                         {departments.map(d => <option key={d} value={d}>{d}</option>)}
                                     </select>
                                 )}
@@ -160,6 +182,16 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                         </div>
 
                         <div className="h-px bg-border" />
+
+                        {/* SoC Settings */}
+                        <div className="space-y-3">
+                            <Label className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Span of Control (SoC)</Label>
+                            <SoCControls
+                                currentLow={socThresholdLow}
+                                currentHigh={socThresholdHigh}
+                                onApply={setSoCThresholds}
+                            />
+                        </div>
 
                         {/* Toggles */}
                         <div className="space-y-3">

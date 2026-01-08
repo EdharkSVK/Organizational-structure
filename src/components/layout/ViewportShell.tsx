@@ -35,7 +35,7 @@ export const ViewportShell: React.FC<ViewportShellProps> = ({
 
                 {/* View-Specific UI passed from parent */}
                 {uiOverlay && (
-                    <div className="pointer-events-auto absolute inset-0">
+                    <div className="pointer-events-none absolute inset-0">
                         {uiOverlay}
                     </div>
                 )}

@@ -19,45 +19,57 @@ export const OrgChartView: React.FC = () => {
     // Shared Camera Hook
     const { containerRef, transform, zoomIn, zoomOut, reset, fitToBounds, isReady } = useViewportCamera({
         minZoom: 0.1,
-        maxZoom: 3,
-        initialTransform: { x: 0, y: 0, k: 0.5 }
+        maxZoom: 2,
+        initialTransform: { x: 0, y: 0, k: 1 }
     });
 
     const [hoveredNode, setHoveredNode] = useState<{ x: number, y: number, data: OrgNode } | null>(null);
 
-    // Memoize Tree Layout
+    // 1. Process Data & Layout
     const treeData = useMemo(() => {
         if (!parseResult?.root) return null;
-        let rootNode = parseResult.root;
 
-        // Scope Filtering (Simplified for MVP)
+        // Determine Effective Root
+        let effectiveRootData = parseResult.root;
+
         if (scopeType === 'department' && selectedDepartment) {
-            const q = [rootNode];
-            let foundRoot = null;
-            while (q.length) {
-                const n = q.shift()!;
-                if (n.data.department_name === selectedDepartment) {
-                    foundRoot = n;
-                    break;
+            const fullRoot = d3.hierarchy(parseResult.root);
+            const heads: d3.HierarchyNode<OrgNode>[] = [];
+
+            fullRoot.each(node => {
+                const nodeDept = node.data.data.department_name;
+                const parentDept = node.parent?.data.data.department_name;
+
+                if (nodeDept === selectedDepartment && parentDept !== selectedDepartment) {
+                    heads.push(node);
                 }
-                if (n.children) q.push(...n.children);
+            });
+
+            if (heads.length > 0) {
+                effectiveRootData = heads[0].data;
             }
-            if (foundRoot) rootNode = foundRoot;
         } else if (scopeType === 'subsidiary' && selectedSubsidiary) {
-            const q = [rootNode];
-            let foundRoot = null;
-            while (q.length) {
-                const n = q.shift()!;
-                if (n.data.subsidiary_name === selectedSubsidiary) {
-                    foundRoot = n;
-                    break;
+            // Similar logic for subsidiary if needed
+            const fullRoot = d3.hierarchy(parseResult.root);
+            const heads: d3.HierarchyNode<OrgNode>[] = [];
+
+            fullRoot.each(node => {
+                const nodeSub = node.data.data.subsidiary_name;
+                // Subsidiary heads might be tricky if they report to Group CEO. 
+                // Assuming similar "Parent not in Sub" logic.
+                const parentSub = node.parent?.data.data.subsidiary_name;
+
+                if (nodeSub === selectedSubsidiary && parentSub !== selectedSubsidiary) {
+                    heads.push(node);
                 }
-                if (n.children) q.push(...n.children);
+            });
+
+            if (heads.length > 0) {
+                effectiveRootData = heads[0].data;
             }
-            if (foundRoot) rootNode = foundRoot;
         }
 
-        const hierarchy = d3.hierarchy(rootNode);
+        const hierarchy = d3.hierarchy(effectiveRootData);
         const treeLayout = d3.tree<OrgNode>().nodeSize([NODE_WIDTH + 40, LEVEL_GAP]);
         const root = treeLayout(hierarchy);
 
@@ -85,6 +97,8 @@ export const OrgChartView: React.FC = () => {
             }
 
             // Fit the tree
+            // If checking a department, maybe zoom closer? 
+            // Standard fit is fine.
             fitToBounds({ x: minX, y: minY, width, height }, 50);
         }
     }, [isReady, treeData, fitToBounds]);
