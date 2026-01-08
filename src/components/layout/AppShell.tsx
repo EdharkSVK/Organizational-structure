@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useStore } from '../../data/store';
 import { DetailsPanel } from './DetailsPanel';
 import { SoCControls } from './SoCControls';
-import { Layout, Search, Users, Circle, FolderOpen, Maximize, Minus, Plus, RefreshCw } from 'lucide-react';
+import { Layout, Search, Users, Circle, FolderOpen, Maximize, Minus, Plus, RefreshCw, RotateCcw, Check } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -21,22 +21,26 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         parseResult,
         setIsReadyToVisualize, // To go back
         socThresholdLow, socThresholdHigh, setSoCThresholds,
+        maxVisibleDepth, setMaxVisibleDepth,
         showGrid, toggleShowGrid,
         showTooltips, toggleShowTooltips
     } = useStore();
 
 
     // Derived Lists for Dropdowns
-    const { locations, departments, deptColors, currentCount } = useMemo(() => {
-        if (!parseResult) return { locations: [], departments: [], deptColors: new Map(), currentCount: 0 };
+    const { locations, departments, deptColors, currentCount, actualMaxDepth } = useMemo(() => {
+        if (!parseResult) return { locations: [], departments: [], deptColors: new Map(), currentCount: 0, actualMaxDepth: 1 };
         const locs = new Set<string>();
         const depts = new Set<string>();
         const colors = new Map<string, string>();
 
         // Calculate count based on current filters
         let count = 0;
+        let maxDepth = 1;
 
         parseResult.flatNodes.forEach(node => {
+            if (node.depth > maxDepth) maxDepth = node.depth;
+
             if (node.data.location) locs.add(node.data.location);
             // Fallback if user used subsidiary column? Let's check both if strictly needed, but user asked for location.
             // If location is empty, maybe check subsidiary? But let's stick to location as requested.
@@ -59,9 +63,43 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             locations: Array.from(locs).sort(),
             departments: Array.from(depts).sort(),
             deptColors: colors,
-            currentCount: count
+            currentCount: count,
+            actualMaxDepth: maxDepth
         };
     }, [parseResult, selectedLocation, selectedDepartment]);
+
+    // Local Deferred State
+    const [localLocation, setLocalLocation] = useState<string | null>(selectedLocation);
+    const [localDepartment, setLocalDepartment] = useState<string | null>(selectedDepartment);
+    const [localDepth, setLocalDepth] = useState<number>(maxVisibleDepth);
+
+    // Sync local state when store changes (e.g. reset from other source, though unlikely)
+    // We only want to init, not constantly overwrite edits if only store changes. 
+    // Actually, simpler: init from store, but don't auto-sync if user is editing. 
+    // But for now, let's just use local state as the driver for the UI.
+
+    // We init from store state, but manage locally until Apply.
+    // Explicitly NOT syncing automatically to avoid overwriting user WIP if store updates for other reasons (rare).
+    // Handle resets properly in the handler.
+
+    const handleApplyFilters = () => {
+        setFilter('location', localLocation);
+        setFilter('department', localDepartment);
+        setMaxVisibleDepth(localDepth);
+    };
+
+    const handleResetFilters = () => {
+        setLocalLocation(null);
+        setLocalDepartment(null);
+        setLocalDepth(actualMaxDepth); // Reset to max available
+
+        // Also apply immediately on reset? Or wait for Apply? Usually reset implies immediate action or reset-then-apply.
+        // User asked for "Reset Button". Usually resets to defaults.
+        // Let's apply immediately for better UX on reset.
+        setFilter('location', null);
+        setFilter('department', null);
+        setMaxVisibleDepth(actualMaxDepth);
+    };
 
     const handleReset = () => {
         // Simple "Back to Home"
@@ -139,8 +177,8 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                                 <Label className="text-[10px] text-muted-foreground uppercase font-bold">Location</Label>
                                 <select
                                     className="w-full text-xs bg-background border rounded-md p-2"
-                                    value={selectedLocation || ''}
-                                    onChange={(e) => setFilter('location', e.target.value || null)}
+                                    value={localLocation || ''}
+                                    onChange={(e) => setLocalLocation(e.target.value || null)}
                                 >
                                     <option value="">All Locations</option>
                                     {locations.map(s => <option key={s} value={s}>{s}</option>)}
@@ -151,8 +189,8 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                                 <Label className="text-[10px] text-muted-foreground uppercase font-bold">Department</Label>
                                 <select
                                     className="w-full text-xs bg-background border rounded-md p-2"
-                                    value={selectedDepartment || ''}
-                                    onChange={(e) => setFilter('department', e.target.value || null)}
+                                    value={localDepartment || ''}
+                                    onChange={(e) => setLocalDepartment(e.target.value || null)}
                                 >
                                     <option value="">All Departments</option>
                                     {departments.map(d => <option key={d} value={d}>{d}</option>)}
@@ -160,9 +198,41 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                             </div>
                         </div>
 
+                        {/* Depth Filter */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Visible Levels</Label>
+                                <span className="text-[10px] font-mono text-foreground">{Math.min(localDepth, actualMaxDepth)} / {actualMaxDepth}</span>
+                            </div>
+                            <div className="pt-2 px-1">
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max={actualMaxDepth}
+                                    value={Math.min(localDepth, actualMaxDepth)}
+                                    onChange={(e) => setLocalDepth(parseInt(e.target.value))}
+                                    className="w-full h-1 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                                />
+                                <div className="flex justify-between mt-1 text-[9px] text-muted-foreground">
+                                    <span>Root</span>
+                                    <span>All</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 pt-2">
+                            <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={handleResetFilters}>
+                                <RotateCcw className="w-3 h-3 mr-1" /> Reset
+                            </Button>
+                            <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleApplyFilters}>
+                                <Check className="w-3 h-3 mr-1" /> Apply
+                            </Button>
+                        </div>
+
                         <div className="h-px bg-border" />
 
-                        {/* SoC Settings */}
+                        {/* SoC Settings (Has its own Apply) */}
                         <div className="space-y-3">
                             <Label className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Span of Control (SoC)</Label>
                             <SoCControls
@@ -171,6 +241,10 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                                 onApply={setSoCThresholds}
                             />
                         </div>
+
+                        <div className="h-px bg-border" />
+
+                        <div className="h-px bg-border" />
 
                         {/* Toggles */}
                         <div className="space-y-3">

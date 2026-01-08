@@ -13,7 +13,7 @@ export const OrgChartView: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const {
         parseResult, selectedLocation, selectedDepartment,
-        selectedNodeId, setSelectedNodeId
+        selectedNodeId, setSelectedNodeId, maxVisibleDepth
     } = useStore();
 
     // Shared Camera Hook
@@ -146,6 +146,8 @@ export const OrgChartView: React.FC = () => {
         if (transform.k < 0.5) ctx.lineWidth = 2.5; // Thicker when zoomed out
         ctx.beginPath();
         treeData.root.links().forEach(link => {
+            if (link.source.depth > maxVisibleDepth || link.target.depth > maxVisibleDepth) return;
+
             const sx = link.source.x;
             const sy = link.source.y;
             const tx = link.target.x;
@@ -183,6 +185,8 @@ export const OrgChartView: React.FC = () => {
 
         // Draw Nodes (Cards)
         treeData.root.descendants().forEach(d => {
+            if (d.depth > maxVisibleDepth) return;
+
             // Optimization: Skip rendering if off-screen (Viewport Culling)
             const screenX = d.x * transform.k + transform.x;
             const screenY = d.y * transform.k + transform.y;
@@ -276,7 +280,7 @@ export const OrgChartView: React.FC = () => {
         });
 
         ctx.restore();
-    }, [transform, treeData, selectedNodeId, hoveredNode]);
+    }, [transform, treeData, selectedNodeId, hoveredNode, maxVisibleDepth, selectedLocation]);
 
     // Input Handling
     const handleMouseMove = (e: React.MouseEvent) => {

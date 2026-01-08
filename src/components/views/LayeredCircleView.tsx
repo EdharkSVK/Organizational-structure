@@ -38,6 +38,7 @@ export const LayeredCircleView: React.FC = () => {
         parseResult, showAllLines, selectedNodeId, setSelectedNodeId,
         selectedLocation, selectedDepartment,
         socThresholdLow, socThresholdHigh,
+        maxVisibleDepth,
         showGrid, showTooltips
     } = useStore();
 
@@ -367,6 +368,9 @@ export const LayeredCircleView: React.FC = () => {
 
         // Use individual strokes for colored links (unless performance becomes an issue)
         rootD3.links().forEach(link => {
+            // Depth Check
+            if (link.source.depth > maxVisibleDepth || link.target.depth > maxVisibleDepth) return;
+
             const isHighlightedLink = isInteracting && highlightedIds.has(link.source.data.id) && highlightedIds.has(link.target.data.id);
 
             // If we are interacting and this is a highlighted link, SKIP here (drawn in Pass 2).
@@ -403,6 +407,7 @@ export const LayeredCircleView: React.FC = () => {
             ctx.globalAlpha = 0.9;
 
             rootD3.links().forEach(link => {
+                if (link.source.depth > maxVisibleDepth || link.target.depth > maxVisibleDepth) return;
                 const isHighlightedLink = highlightedIds.has(link.source.data.id) && highlightedIds.has(link.target.data.id);
 
                 if (isHighlightedLink) {

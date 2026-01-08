@@ -57,6 +57,10 @@ interface AppState {
     showTooltips: boolean;
     toggleShowGrid: () => void;
     toggleShowTooltips: () => void;
+
+    // Depth Filter
+    maxVisibleDepth: number;
+    setMaxVisibleDepth: (depth: number) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -110,4 +114,8 @@ export const useStore = create<AppState>((set) => ({
     showTooltips: true,
     toggleShowGrid: () => set((state) => ({ showGrid: !state.showGrid })),
     toggleShowTooltips: () => set((state) => ({ showTooltips: !state.showTooltips })),
+
+    // Depth Filter
+    maxVisibleDepth: 20, // Default generous, will clamp in UI
+    setMaxVisibleDepth: (depth) => set({ maxVisibleDepth: depth }),
 }));
