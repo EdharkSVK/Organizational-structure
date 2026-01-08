@@ -19,14 +19,15 @@ export interface OrgNode {
   data: RawRow;
   children: OrgNode[];
   parentId: string | null;
-  
+
   // Computed Metrics
   depth: number;
+  total_descendants: number; // Recursive count
   total_reports_cnt: number; // Direct reports only for SoC? Or recursive? SoC is direct.
   soc_headcount: number; // Direct reports count
   soc_fte: number; // Direct reports FTE sum
   soc_status: SoCStatus;
-  
+
   // Layout/Rendering helpers (populated later or during layout)
   x?: number;
   y?: number;
@@ -44,6 +45,7 @@ export interface DatasetStats {
 
 export interface ParseResult {
   root: OrgNode | null;
+  secondaryRoots: OrgNode[]; // New field for excluded trees
   flatNodes: Map<string, OrgNode>;
   stats: DatasetStats;
   errors: string[];

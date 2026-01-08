@@ -11,6 +11,7 @@ import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const {
@@ -231,6 +232,39 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                         </div>
 
                         <div className="h-px bg-border" />
+
+                        <div className="h-px bg-border" />
+
+                        {/* Excluded / Secondary Roots Info */}
+                        {parseResult && parseResult.secondaryRoots.length > 0 && (
+                            <div className="space-y-3">
+                                <Label className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Excluded</Label>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-muted-foreground">Orphan Groups: {parseResult.secondaryRoots.length}</span>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="secondary" size="sm" className="h-6 text-[10px] px-2">
+                                                {parseResult.secondaryRoots.reduce((acc, r) => acc + 1 + (r.total_descendants || 0), 0)} Excluded
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-60 p-2 text-xs">
+                                            <div className="font-bold mb-2">Excluded Nodes</div>
+                                            <p className="text-muted-foreground mb-2">
+                                                These nodes have no manager (missing reports_to_id) and are not part of the main tree.
+                                            </p>
+                                            <div className="max-h-40 overflow-y-auto space-y-1">
+                                                {parseResult.secondaryRoots.map(r => (
+                                                    <div key={r.id} className="flex justify-between">
+                                                        <span>{r.data.employee_name}</span>
+                                                        <span className="text-muted-foreground">+{r.total_descendants}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                            </div>
+                        )}
 
                         {/* SoC Settings (Has its own Apply) */}
                         <div className="space-y-3">

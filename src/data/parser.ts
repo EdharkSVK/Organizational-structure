@@ -43,7 +43,7 @@ function processData(rawData: any[]): ParseResult {
     const flatNodes = new Map<string, OrgNode>();
 
     if (rawData.length === 0) {
-        return { root: null, flatNodes, stats: emptyStats(), errors: ['File is empty'] };
+        return { root: null, secondaryRoots: [], flatNodes, stats: emptyStats(), errors: ['File is empty'] };
     }
 
     // 1. Column Validation
@@ -59,7 +59,7 @@ function processData(rawData: any[]): ParseResult {
     }
 
     if (errors.length > 0) {
-        return { root: null, flatNodes, stats: emptyStats(), errors };
+        return { root: null, secondaryRoots: [], flatNodes, stats: emptyStats(), errors };
     }
 
     // 2. Pre-process rows (Dedupe / Matrix)
@@ -100,6 +100,7 @@ function processData(rawData: any[]): ParseResult {
             children: [],
             parentId: row.reports_to_id?.toString().trim() || null,
             depth: 0,
+            total_descendants: 0,
             total_reports_cnt: 0,
             soc_headcount: 0,
             soc_fte: 0,
@@ -132,71 +133,71 @@ function processData(rawData: any[]): ParseResult {
         }
     });
 
-    // 5. Handle Multiple Roots
-    let root: OrgNode | null = null;
-    if (roots.length === 1) {
-        root = roots[0];
-    } else if (roots.length > 1) {
-        // Synthetic Root
-        root = {
-            id: 'ROOT',
-            data: {
-                employee_id: 'ROOT',
-                employee_name: 'Organization Root',
-                reports_to_id: null,
-                department_name: 'Root',
-                fte: 0,
-            },
-            children: roots,
-            parentId: null,
-            depth: 0,
-            total_reports_cnt: 0,
-            soc_headcount: 0,
-            soc_fte: 0,
-            soc_status: 'ok',
-            color: '#000000',
-        };
-        flatNodes.set('ROOT', root);
-    }
-
-    // 6. Metrics & Depth (DFS)
-    // Also Cycle Detection
+    // 5. Calculate Metrics & Descendants (DFS) BEFORE determining main root
+    // We need to know which tree is biggest.
     const visited = new Set<string>();
     let cycleDetected = false;
 
-    function traverse(node: OrgNode, d: number) {
+    function calculateMetrics(node: OrgNode, d: number): number {
         if (visited.has(node.id)) {
             cycleDetected = true;
             errors.push(`Cycle detected involving user ${node.data.employee_name}`);
-            return;
+            return 0;
         }
         visited.add(node.id);
         node.depth = d;
 
         // SoC: Direct reports only
         node.soc_headcount = node.children.length;
-        node.soc_fte = node.children.reduce((sum, child) => sum + (child.data.fte || 0), 0);
         // Default SoC Status (Global defaults 3-8, can be overridden in store, but here we set initial)
-        node.soc_status = getSoCStatus(node.soc_headcount, 3, 8); // hardcoded defaults for parse time
+        if (node.children.length === 0) {
+            node.soc_status = 'ok'; // Leaf nodes are not subject to SoC checks
+        } else {
+            node.soc_status = getSoCStatus(node.soc_headcount, 3, 8); // hardcoded defaults for parse time
+        }
 
-        node.children.forEach(child => traverse(child, d + 1));
+        // Recursive descendants
+        let descendants = 0;
+        node.children.forEach(child => {
+            descendants += 1 + calculateMetrics(child, d + 1);
+        });
+        node.total_descendants = descendants;
 
-        visited.delete(node.id); // Backtrack for other paths if graph (but it's tree)
+        visited.delete(node.id);
+        return descendants;
     }
 
-    if (root) {
-        traverse(root, 0);
+    // Run metrics on ALL roots to populate data
+    roots.forEach(r => calculateMetrics(r, 0));
+
+    // 6. Split Main vs Secondary Roots
+    // Sort by total size (descendants + 1 for self)
+    roots.sort((a, b) => (b.total_descendants + 1) - (a.total_descendants + 1));
+
+    let root: OrgNode | null = null;
+    let secondaryRoots: OrgNode[] = [];
+
+    if (roots.length > 0) {
+        // Largest is Main
+        root = roots[0];
+        // Rest are Secondary/Excluded
+        secondaryRoots = roots.slice(1);
     }
+
+    // Re-run depth for Main Root from 0? It already ran with 0.
+    // Re-run depth for Secondary Roots? They also ran with 0.
+    // Only issue is if we merged them before, depths would shift. 
+    // Since we treat them as separate roots, depth 0 is correct for all of them relative to their own tree.
 
     const stats: DatasetStats = {
         totalRows: rawData.length,
         validRows: flatNodes.size,
-        orphanCount: orphanIds.size,
+        orphanCount: orphanIds.size + secondaryRoots.reduce((acc, r) => acc + 1 + r.total_descendants, 0), // Orphans (no parent ref) + Secondary Trees
         cycleCount: cycleDetected ? 1 : 0,
         roots: roots.map(r => r.id),
     };
 
-    return { root, flatNodes, stats, errors };
+    return { root, secondaryRoots, flatNodes, stats, errors };
 }
 
 function emptyStats(): DatasetStats {

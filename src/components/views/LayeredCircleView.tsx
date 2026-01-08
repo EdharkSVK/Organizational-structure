@@ -127,6 +127,26 @@ export const LayeredCircleView: React.FC = () => {
 
         tree(root);
 
+        // Secondary Layout (Radial)
+        let secondaryRootD3 = null;
+
+        if (parseResult.secondaryRoots && parseResult.secondaryRoots.length > 0) {
+            const secondaryDummy = {
+                id: 'SEC_ROOT',
+                data: { ...parseResult.secondaryRoots[0].data },
+                children: parseResult.secondaryRoots,
+                depth: 0,
+                soc_status: 'ok'
+            } as any;
+
+            const secRoot = d3.hierarchy(secondaryDummy);
+
+            // Apply SAME tree layout settings
+            tree(secRoot);
+            secondaryRootD3 = secRoot;
+        }
+
+        // Dept Clusters logic (for Main only? or both? Main is plenty for background context).
         const deptClusters = new Map<string, { minX: number, maxX: number, color: string, maxDepth: number }>();
 
         if (root.children) {
@@ -179,7 +199,8 @@ export const LayeredCircleView: React.FC = () => {
         });
 
         return {
-            root,
+            root, // Main Root (HierarchyPointNode)
+            secondaryRootD3, // Secondary Root
             maxDepth: globalMaxDepth,
             depthCounts,
             deptClusters,
@@ -259,7 +280,6 @@ export const LayeredCircleView: React.FC = () => {
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
 
-        const rootD3 = layoutData.root as d3.HierarchyPointNode<OrgNode>;
         const nodeR = layoutData.nodeRadius;
 
 
@@ -362,139 +382,156 @@ export const LayeredCircleView: React.FC = () => {
         ctx.strokeStyle = colors.mutedFg;
         ctx.globalAlpha = 1.0;
 
-        // 2. Links
-        // Pass 1: Dimmed Links / Normal Links
-        ctx.lineWidth = 1.5 / transform.k;
-
-        // Use individual strokes for colored links (unless performance becomes an issue)
-        rootD3.links().forEach(link => {
-            // Depth Check
-            if (link.source.depth > maxVisibleDepth || link.target.depth > maxVisibleDepth) return;
-
-            const isHighlightedLink = isInteracting && highlightedIds.has(link.source.data.id) && highlightedIds.has(link.target.data.id);
-
-            // If we are interacting and this is a highlighted link, SKIP here (drawn in Pass 2).
-            if (isHighlightedLink) return;
-
-            // Determine Color
-            let strokeColor = colors.border; // Default
-            const headcount = link.source.data.soc_headcount || 0;
-            const status = getSoCStatus(headcount, socThresholdLow, socThresholdHigh);
-
-            if (status === 'high' || status === 'low') strokeColor = '#ef4444'; // Red
-            if (status === 'ok') strokeColor = '#22c55e'; // Green
-
-            // If interacting and NOT highlighted, overrides to dimmed grey
-            if (isInteracting) {
-                strokeColor = colors.border;
-                ctx.globalAlpha = 0.05;
-            } else {
-                ctx.globalAlpha = 0.6; // Resting opacity
-            }
-
-            ctx.beginPath();
-            ctx.strokeStyle = strokeColor;
-            const s = project(link.source.x, link.source.y * RADIUS);
-            const t = project(link.target.x, link.target.y * RADIUS);
-            ctx.moveTo(s.x, s.y);
-            ctx.lineTo(t.x, t.y);
-            ctx.stroke();
-        });
-
-        // Pass 2: Highlighted Links (Top Layer)
-        if (isInteracting) {
-            ctx.lineWidth = 2.5 / transform.k; // Thicker
-            ctx.globalAlpha = 0.9;
-
-            rootD3.links().forEach(link => {
-                if (link.source.depth > maxVisibleDepth || link.target.depth > maxVisibleDepth) return;
-                const isHighlightedLink = highlightedIds.has(link.source.data.id) && highlightedIds.has(link.target.data.id);
-
-                if (isHighlightedLink) {
-                    // Highlight uses SoC Color but thicker/brighter
-                    const headcount = link.source.data.soc_headcount || 0;
-                    const status = getSoCStatus(headcount, socThresholdLow, socThresholdHigh);
-
-                    let strokeColor = colors.primary; // Fallback/Default
-                    if (status === 'high' || status === 'low') strokeColor = '#ef4444'; // Red
-                    if (status === 'ok') strokeColor = '#22c55e'; // Green
-
-                    ctx.strokeStyle = strokeColor;
-
-                    ctx.beginPath();
-                    const s = project(link.source.x, link.source.y * RADIUS);
-                    const t = project(link.target.x, link.target.y * RADIUS);
-                    ctx.moveTo(s.x, s.y);
-                    ctx.lineTo(t.x, t.y);
-                    ctx.stroke();
-                }
-            });
+        // Initialize trees list
+        const trees = [{ root: layoutData.root as d3.HierarchyPointNode<OrgNode>, isSec: false }];
+        if (layoutData.secondaryRootD3) {
+            trees.push({ root: layoutData.secondaryRootD3 as d3.HierarchyPointNode<OrgNode>, isSec: true });
         }
 
-        ctx.globalAlpha = 1.0;
+        trees.forEach(({ root, isSec }) => {
+            const shiftX = isSec ? (RADIUS * 2.5) : 0; // Shift secondary tree to the right
 
-        // 3. Nodes
-        rootD3.descendants().forEach(d => {
-            const { x, y } = project(d.x, d.y * RADIUS);
+            ctx.save();
+            ctx.translate(shiftX, 0);
 
-            const isSelected = selectedNodeId === d.data.id;
-            const isHovered = hoveredNode?.data.id === d.data.id;
-            const isHighlighted = isInteracting && highlightedIds.has(d.data.id);
-            const matchesFilter = !selectedLocation || d.data.data.location === selectedLocation;
-
-            // Visibility logic
-            const isRelevant = isSelected || isHovered || isHighlighted;
-
-            // Alpha Calculation
-            let alpha = 1.0;
-            if (isInteracting) {
-                // Interaction overrides filter for relevant context
-                alpha = isRelevant ? 1.0 : 0.1;
-            } else {
-                // Resting state: Apply Filter
-                alpha = matchesFilter ? 1.0 : 0.05;
-            }
-
-            ctx.globalAlpha = alpha;
-
-            ctx.beginPath();
-            const r = d.depth === 0 ? nodeR * 1.5 : nodeR;
-
-            ctx.arc(x, y, r, 0, 2 * Math.PI);
-
-            // @ts-ignore
-            let fillColor = d.data._displayColor || colors.muted;
-            if (d.depth === 0) fillColor = colors.card;
-
-            ctx.fillStyle = fillColor;
-            ctx.fill();
-
-            // Border
+            // 2. Links
+            // Pass 1: Dimmed Links / Normal Links
             ctx.lineWidth = 1.5 / transform.k;
-            ctx.strokeStyle = colors.background;
 
-            if (isHighlighted) {
-                ctx.strokeStyle = colors.primary; // Highlight path nodes
-            }
+            root.links().forEach(link => {
+                // Depth Check
+                if (link.source.depth > maxVisibleDepth || link.target.depth > maxVisibleDepth) return;
+                if (link.source.data.id === 'SEC_ROOT') return;
 
-            if (isSelected || isHovered) {
-                ctx.strokeStyle = colors.primary;
-                ctx.lineWidth = 3 / transform.k;
-            }
-            ctx.stroke();
+                const isHighlightedLink = isInteracting && highlightedIds.has(link.source.data.id) && highlightedIds.has(link.target.data.id);
+                if (isHighlightedLink) return;
 
-            // Highlight Ring
-            if (isHovered && !isSelected) {
+                let strokeColor = colors.border;
+                const headcount = link.source.data.soc_headcount || 0;
+                const status = getSoCStatus(headcount, socThresholdLow, socThresholdHigh);
+
+                if (status === 'high' || status === 'low') strokeColor = '#ef4444';
+                if (status === 'ok') strokeColor = '#22c55e';
+
+                if (isInteracting) {
+                    strokeColor = colors.border;
+                    ctx.globalAlpha = 0.05;
+                } else {
+                    ctx.globalAlpha = 0.6;
+                }
+
                 ctx.beginPath();
-                ctx.arc(x, y, r + 4 / transform.k, 0, 2 * Math.PI);
-                ctx.strokeStyle = colors.primary;
-                ctx.lineWidth = 1 / transform.k;
+                ctx.strokeStyle = strokeColor;
+                const s = project(link.source.x, link.source.y * RADIUS);
+                const t = project(link.target.x, link.target.y * RADIUS);
+                ctx.moveTo(s.x, s.y);
+                ctx.lineTo(t.x, t.y);
                 ctx.stroke();
+            });
+
+            // Pass 2: Highlighted Links (Top Layer)
+            if (isInteracting) {
+                ctx.lineWidth = 2.5 / transform.k;
+                ctx.globalAlpha = 0.9;
+
+                root.links().forEach(link => {
+                    if (link.source.depth > maxVisibleDepth || link.target.depth > maxVisibleDepth) return;
+                    if (link.source.data.id === 'SEC_ROOT') return;
+
+                    const isHighlightedLink = highlightedIds.has(link.source.data.id) && highlightedIds.has(link.target.data.id);
+
+                    if (isHighlightedLink) {
+                        const headcount = link.source.data.soc_headcount || 0;
+                        const status = getSoCStatus(headcount, socThresholdLow, socThresholdHigh);
+
+                        let strokeColor = colors.primary;
+                        if (status === 'high' || status === 'low') strokeColor = '#ef4444';
+                        if (status === 'ok') strokeColor = '#22c55e';
+
+                        ctx.strokeStyle = strokeColor;
+                        ctx.beginPath();
+                        const s = project(link.source.x, link.source.y * RADIUS);
+                        const t = project(link.target.x, link.target.y * RADIUS);
+                        ctx.moveTo(s.x, s.y);
+                        ctx.lineTo(t.x, t.y);
+                        ctx.stroke();
+                    }
+                });
             }
+
+            ctx.globalAlpha = 1.0;
+
+            // 3. Nodes
+            root.descendants().forEach(d => {
+                if (d.depth > maxVisibleDepth) return;
+                if (d.data.id === 'SEC_ROOT') return; // Hide dummy root
+
+                const { x, y } = project(d.x, d.y * RADIUS);
+
+                const isSelected = selectedNodeId === d.data.id;
+                const isHovered = hoveredNode?.data.id === d.data.id;
+                const isHighlighted = isInteracting && highlightedIds.has(d.data.id);
+                const matchesFilter = !selectedLocation || d.data.data.location === selectedLocation;
+
+                const isRelevant = isSelected || isHovered || isHighlighted;
+                let alpha = 1.0;
+                if (isInteracting) {
+                    alpha = isRelevant ? 1.0 : 0.1;
+                } else {
+                    alpha = matchesFilter ? 1.0 : 0.05;
+                }
+
+                ctx.globalAlpha = alpha;
+                ctx.beginPath();
+                const r = d.depth === 0 ? nodeR * 1.5 : nodeR;
+                ctx.arc(x, y, r, 0, 2 * Math.PI);
+
+                // Ensure data.color is applied for nodes
+                let fillColor = d.data.color || colors.muted;
+                // Fallback to _displayColor if color is missing? parseData sets d.color from dept name.
+                // _displayColor in original code was setting wedge ancestor color.
+                // User asked for "coloring rules from one layer to another". 
+                // This implies using the node's OWN department color is preferred over inherited wedge color.
+                // d.data.color is populated by parser.
+
+                if (d.depth === 0) fillColor = colors.card;
+
+                ctx.fillStyle = fillColor;
+                ctx.fill();
+
+                // Border
+                ctx.lineWidth = 1.5 / transform.k;
+                ctx.strokeStyle = colors.background;
+
+                if (isHighlighted) {
+                    ctx.strokeStyle = colors.primary;
+                }
+
+                if (isSelected || isHovered) {
+                    ctx.strokeStyle = colors.primary;
+                    ctx.lineWidth = 3 / transform.k;
+                }
+                ctx.stroke();
+
+                // SoC Ring (Status)
+                if (!isInteracting && !isSelected && !isHovered && d.depth > 0) {
+                    const status = d.data.soc_status;
+                    if (status !== 'ok') {
+                        let show = false;
+                        if (status === 'high') show = true;
+                        if (status === 'low') show = true;
+                        if (show) {
+                            ctx.lineWidth = 2 / transform.k;
+                            ctx.strokeStyle = '#ef4444';
+                            ctx.stroke();
+                        }
+                    }
+                }
+            });
+
+            ctx.restore();
         });
-
         ctx.restore();
-
     }, [transform, layoutData, selectedNodeId, hoveredNode, showAllLines, socThresholdLow, socThresholdHigh, showGrid]);
 
     // Input Handling
