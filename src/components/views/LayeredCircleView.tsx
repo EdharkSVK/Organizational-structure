@@ -371,7 +371,8 @@ export const LayeredCircleView: React.FC = () => {
 
             // Determine Color
             let strokeColor = colors.border; // Default
-            const status = link.source.data.soc_status;
+            const headcount = link.source.data.soc_headcount || 0;
+            const status = getSoCStatus(headcount, socThresholdLow, socThresholdHigh);
 
             if (status === 'high' || status === 'low') strokeColor = '#ef4444'; // Red
             if (status === 'ok') strokeColor = '#22c55e'; // Green
