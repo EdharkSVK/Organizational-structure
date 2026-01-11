@@ -39,7 +39,7 @@ export const LayeredCircleView: React.FC = () => {
         selectedLocation, selectedDepartment,
         socThresholdLow, socThresholdHigh,
         maxVisibleDepth,
-        showGrid, showTooltips
+        showGrid, showTooltips, showDeptBackground
     } = useStore();
 
     // Shared Camera Hook
@@ -303,8 +303,10 @@ export const LayeredCircleView: React.FC = () => {
         const isInteracting = highlightedIds.size > 0;
 
 
-        // 0. Draw Department Background Wedges & Peripheral Labels
-        if (layoutData.deptClusters) {
+        // 0. Draw Wedges (Background)
+        // Draw wedges for departments (based on angle clusters)
+        ctx.globalAlpha = 1.0;
+        if (showDeptBackground && !isInteracting && layoutData.deptClusters) {
             layoutData.deptClusters.forEach((cluster, deptName) => {
                 let { minX, maxX, color, maxDepth } = cluster;
 
@@ -532,7 +534,7 @@ export const LayeredCircleView: React.FC = () => {
             ctx.restore();
         });
         ctx.restore();
-    }, [transform, layoutData, selectedNodeId, hoveredNode, showAllLines, socThresholdLow, socThresholdHigh, showGrid]);
+    }, [transform, layoutData, selectedNodeId, hoveredNode, showAllLines, socThresholdLow, socThresholdHigh, showGrid, showDeptBackground]);
 
     // Input Handling
     const handleMouseMove = (e: React.MouseEvent) => {

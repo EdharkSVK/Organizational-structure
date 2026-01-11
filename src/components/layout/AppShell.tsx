@@ -24,16 +24,18 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         socThresholdLow, socThresholdHigh, setSoCThresholds,
         maxVisibleDepth, setMaxVisibleDepth,
         showGrid, toggleShowGrid,
-        showTooltips, toggleShowTooltips
+        showTooltips, toggleShowTooltips,
+        showDeptBackground, toggleShowDeptBackground
     } = useStore();
 
 
     // Derived Lists for Dropdowns
-    const { locations, departments, deptColors, currentCount, actualMaxDepth } = useMemo(() => {
-        if (!parseResult) return { locations: [], departments: [], deptColors: new Map(), currentCount: 0, actualMaxDepth: 1 };
+    const { locations, departments, deptColors, currentCount, deptCountList, actualMaxDepth } = useMemo(() => {
+        if (!parseResult) return { locations: [], departments: [], deptColors: new Map(), currentCount: 0, deptCountList: [], actualMaxDepth: 1 };
         const locs = new Set<string>();
         const depts = new Set<string>();
         const colors = new Map<string, string>();
+        const deptCounts = new Map<string, number>();
 
         // Calculate count based on current filters
         let count = 0;
@@ -57,14 +59,21 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
             if (matchesLocation && matchesDepartment) {
                 count++;
+                // Track per-department count (for filtered set)
+                const dName = node.data.department_name || 'Unassigned';
+                deptCounts.set(dName, (deptCounts.get(dName) || 0) + 1);
             }
         });
+
+        // Convert deptCounts to array for sorting
+        const deptCountList = Array.from(deptCounts.entries()).sort((a, b) => b[1] - a[1]);
 
         return {
             locations: Array.from(locs).sort(),
             departments: Array.from(depts).sort(),
             deptColors: colors,
             currentCount: count,
+            deptCountList, // Exported list
             actualMaxDepth: maxDepth
         };
     }, [parseResult, selectedLocation, selectedDepartment]);
@@ -142,7 +151,32 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                             </div>
                         </div>
 
-                        {/* View Switcher */}
+                        {/* Scope & View Switcher */}
+                        <div className="flex items-center gap-2">
+                            <Label className="text-xs font-bold text-muted-foreground mr-2">SCOPE:</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" size="sm" className="h-6 text-xs font-mono">
+                                        Count: {currentCount}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-60 p-2 text-xs" align="end">
+                                    <div className="font-bold mb-2 flex justify-between">
+                                        <span>Total Selected</span>
+                                        <span>{currentCount}</span>
+                                    </div>
+                                    <div className="h-px bg-border my-2" />
+                                    <div className="max-h-60 overflow-y-auto space-y-1">
+                                        {deptCountList.map(([name, count]) => (
+                                            <div key={name} className="flex justify-between">
+                                                <span className="truncate max-w-[140px]" title={name}>{name}</span>
+                                                <span className="text-muted-foreground font-mono">{count}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
                         <div className="space-y-2">
                             <Label className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Visualization</Label>
                             <div className="grid grid-cols-2 gap-2">
@@ -288,8 +322,12 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                                 <Switch id="show-lines" checked={showGrid} onCheckedChange={toggleShowGrid} />
                             </div>
                             <div className="flex items-center justify-between">
-                                <Label htmlFor="show-labels" className="text-xs font-normal">Details on Hover</Label>
-                                <Switch id="show-labels" checked={showTooltips} onCheckedChange={toggleShowTooltips} />
+                                <Label className="text-xs">Details on hover</Label>
+                                <Switch checked={showTooltips} onCheckedChange={toggleShowTooltips} />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <Label className="text-xs">Show Dept. Background</Label>
+                                <Switch checked={showDeptBackground} onCheckedChange={toggleShowDeptBackground} />
                             </div>
                         </div>
 
