@@ -146,42 +146,61 @@ export const LayeredCircleView: React.FC = () => {
             secondaryRootD3 = secRoot;
         }
 
-        // Dept Clusters logic (for Main only? or both? Main is plenty for background context).
-        const deptClusters = new Map<string, { minX: number, maxX: number, color: string, maxDepth: number }>();
+        // Dept Segments Logic: Contiguous blocks based on LEAVES (Last Layer)
+        type DeptSegment = { dept: string, minX: number, maxX: number, color: string, maxDepth: number, count: number };
+        const deptSegments: DeptSegment[] = [];
 
-        if (root.children) {
-            (root.children as d3.HierarchyPointNode<OrgNode>[]).forEach(child => {
-                const deptName = child.data.data.department_name;
+        // 1. Get all leaves and sort by angle (x)
+        const leaves = root.leaves() as d3.HierarchyPointNode<OrgNode>[];
+        leaves.sort((a, b) => (a.x || 0) - (b.x || 0));
+
+        if (leaves.length > 0) {
+            let currentSegment: DeptSegment | null = null;
+
+            leaves.forEach((leaf) => {
+                const deptName = leaf.data.data.department_name;
                 const color = deptColorMap.get(deptName) || '#ccc';
+                const lx = leaf.x || 0;
 
-                let localMin = child.x;
-                let localMax = child.x;
-                let localMaxDepth = child.depth;
+                // If starting new or department changed
+                if (!currentSegment || currentSegment.dept !== deptName) {
+                    if (currentSegment) deptSegments.push(currentSegment);
 
-                (child.descendants() as d3.HierarchyPointNode<OrgNode>[]).forEach(d => {
-                    if (d.x < localMin) localMin = d.x;
-                    if (d.x > localMax) localMax = d.x;
-                    if (d.depth > localMaxDepth) localMaxDepth = d.depth;
-                });
-
-                const existing = deptClusters.get(deptName);
-                if (existing) {
-                    deptClusters.set(deptName, {
-                        minX: Math.min(existing.minX, localMin),
-                        maxX: Math.max(existing.maxX, localMax),
+                    currentSegment = {
+                        dept: deptName,
+                        minX: lx,
+                        maxX: lx,
                         color,
-                        maxDepth: Math.max(existing.maxDepth, localMaxDepth)
-                    });
+                        maxDepth: leaf.depth, // Initialize with leaf depth
+                        count: 1
+                    };
                 } else {
-                    deptClusters.set(deptName, {
-                        minX: localMin,
-                        maxX: localMax,
-                        color,
-                        maxDepth: localMaxDepth
-                    });
+                    // Extend current segment
+                    currentSegment.maxX = lx;
+                    currentSegment.count++;
+                    currentSegment.maxDepth = Math.max(currentSegment.maxDepth, leaf.depth);
                 }
             });
+            if (currentSegment) deptSegments.push(currentSegment);
         }
+
+        // Post-process: Extend minX/maxX to cover gaps between leaves?
+        // d3.tree separates nodes. We want wedges to touch if they are adjacent.
+        // Usually we take (node[i].x + node[i+1].x) / 2 as boundary.
+        // For simplicity, we can let them strictly follow node centers, or pad them.
+        // Re-iterating to smooth boundaries:
+        // Post-process: Extend minX/maxX to cover gaps 
+        if (deptSegments.length > 1) {
+            for (let i = 0; i < deptSegments.length - 1; i++) {
+                const curr = deptSegments[i];
+                const next = deptSegments[i + 1];
+                const mid = (curr.maxX + next.minX) / 2;
+                curr.maxX = mid;
+                next.minX = mid;
+            }
+            // Optional: Handle wrap if needed
+        }
+
 
         // DYNAMIC RING SCALING
         let maxNodesInLayer = 0;
@@ -203,7 +222,7 @@ export const LayeredCircleView: React.FC = () => {
             secondaryRootD3, // Secondary Root
             maxDepth: globalMaxDepth,
             depthCounts,
-            deptClusters,
+            deptSegments, // Changed from deptClusters
             minSafeRadius: neededRadius,
             nodeRadius: FIXED_NODE_R,
             nodeMap
@@ -306,32 +325,28 @@ export const LayeredCircleView: React.FC = () => {
         // 0. Draw Wedges (Background)
         // Draw wedges for departments (based on angle clusters)
         ctx.globalAlpha = 1.0;
-        if (showDeptBackground && !isInteracting && layoutData.deptClusters) {
-            layoutData.deptClusters.forEach((cluster, deptName) => {
-                let { minX, maxX, color, maxDepth } = cluster;
-
-                if (maxX - minX < 0.01) {
-                    minX -= 0.05;
-                    maxX += 0.05;
-                }
+        if (showDeptBackground && !isInteracting && layoutData.deptSegments) {
+            layoutData.deptSegments.forEach((segment) => {
+                let { minX, maxX, color, maxDepth, dept } = segment;
 
                 const wedgeR = (maxDepth / levels) * RADIUS;
 
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
+                // Extend slightly to avoid thin white gaps between adjacent wedges of same color?
+                // Actually if departments are different, gap is fine. 
+                // Segments already touch mathematically.
                 ctx.arc(0, 0, wedgeR + (10 / transform.k), minX - Math.PI / 2, maxX - Math.PI / 2);
                 ctx.closePath();
 
                 ctx.fillStyle = color;
-                // Dim wedges if interacting and this wedge is not relevant? 
-                // Actually wedges are background context, keeping them subtle is fine.
                 ctx.globalAlpha = isInteracting ? 0.05 : 0.15;
                 ctx.fill();
 
                 // Peripheral Label
                 const arcLen = (maxX - minX) * RADIUS * transform.k;
 
-                if (arcLen > 20) {
+                if (arcLen > 40) { // Only show label if segment is wide enough
                     ctx.save();
                     const midAngle = (minX + maxX) / 2;
                     const labelR = RADIUS * 1.15;
@@ -351,7 +366,7 @@ export const LayeredCircleView: React.FC = () => {
                     ctx.font = `600 ${14 / transform.k}px Inter, sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(deptName, 0, 0);
+                    ctx.fillText(dept, 0, 0);
                     ctx.restore();
                 }
             });
@@ -489,14 +504,20 @@ export const LayeredCircleView: React.FC = () => {
                 ctx.arc(x, y, r, 0, 2 * Math.PI);
 
                 // Ensure data.color is applied for nodes
-                let fillColor = d.data.color || colors.muted;
-                // Fallback to _displayColor if color is missing? parseData sets d.color from dept name.
-                // _displayColor in original code was setting wedge ancestor color.
-                // User asked for "coloring rules from one layer to another". 
-                // This implies using the node's OWN department color is preferred over inherited wedge color.
-                // d.data.color is populated by parser.
+                // Node Color Logic: All Black, unless Low SoC (Red)
+                let fillColor = '#000000';
+                const hc = d.data.soc_headcount || 0;
+                // We use the dynamic thresholds from store
+                const status = getSoCStatus(hc, socThresholdLow, socThresholdHigh);
 
-                if (d.depth === 0) fillColor = colors.card;
+                if (status === 'low') {
+                    fillColor = '#ef4444'; // Red
+                }
+
+                if (d.depth === 0) fillColor = colors.card; // Center Root is Card Color (or keep white/black?)
+                // Usually root is special. Previous logic made it card color.
+                // User asked dots to be black. Root isn't a "dot" usually, it's the center.
+                // Keeping root special to avoid visual black hole in center.
 
                 ctx.fillStyle = fillColor;
                 ctx.fill();
