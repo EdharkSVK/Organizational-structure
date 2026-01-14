@@ -429,7 +429,8 @@ export const LayeredCircleView: React.FC = () => {
                 const status = getSoCStatus(headcount, socThresholdLow, socThresholdHigh);
 
                 if (status === 'high' || status === 'low') strokeColor = '#ef4444';
-                if (status === 'ok') strokeColor = colors.border; // Gray for OK links
+                if (status === 'ok') strokeColor = '#555555'; // Darker Gray for OK links
+
 
 
                 if (isInteracting) {
@@ -465,7 +466,7 @@ export const LayeredCircleView: React.FC = () => {
 
                         let strokeColor = colors.primary;
                         if (status === 'high' || status === 'low') strokeColor = '#ef4444';
-                        if (status === 'ok') strokeColor = colors.border; // Gray Highlight
+                        if (status === 'ok') strokeColor = '#555555'; // Darker Gray Highlight
 
 
                         ctx.strokeStyle = strokeColor;
