@@ -15,7 +15,8 @@ export const DetailsPanel: React.FC = () => {
         const results: any[] = [];
         // Limit to 10
         for (const node of parseResult.flatNodes.values()) {
-            if (node.data.employee_name.toLowerCase().includes(searchQuery.toLowerCase())) {
+            const name = node.data.employee_name || "";
+            if (name.toLowerCase().includes(searchQuery.toLowerCase())) {
                 results.push(node);
                 if (results.length >= 10) break;
             }

@@ -225,7 +225,8 @@ export const LayeredCircleView: React.FC = () => {
             deptSegments, // Changed from deptClusters
             minSafeRadius: neededRadius,
             nodeRadius: FIXED_NODE_R,
-            nodeMap
+            nodeMap,
+            deptColorMap // <--- EXPOSED
         };
     }, [parseResult, selectedDepartment]);
 
@@ -428,7 +429,7 @@ export const LayeredCircleView: React.FC = () => {
                 const status = getSoCStatus(headcount, socThresholdLow, socThresholdHigh);
 
                 if (status === 'high' || status === 'low') strokeColor = '#ef4444';
-                if (status === 'ok') strokeColor = '#22c55e';
+                if (status === 'ok') strokeColor = '#000000'; // Black for OK links
 
                 if (isInteracting) {
                     strokeColor = colors.border;
@@ -463,7 +464,7 @@ export const LayeredCircleView: React.FC = () => {
 
                         let strokeColor = colors.primary;
                         if (status === 'high' || status === 'low') strokeColor = '#ef4444';
-                        if (status === 'ok') strokeColor = '#22c55e';
+                        if (status === 'ok') strokeColor = '#000000'; // Black Highlight
 
                         ctx.strokeStyle = strokeColor;
                         ctx.beginPath();
@@ -504,27 +505,30 @@ export const LayeredCircleView: React.FC = () => {
                 ctx.arc(x, y, r, 0, 2 * Math.PI);
 
                 // Ensure data.color is applied for nodes
-                // Node Color Logic: All Black, unless Low SoC (Red)
+                // Node Color Logic: 
+                // 1. Fill = Black (as requested: "points should be black").
+                // 2. Stroke = Department Color (to solve "cant see diff between deps").
+
                 let fillColor = '#000000';
-                const hc = d.data.soc_headcount || 0;
-                // We use the dynamic thresholds from store
-                const status = getSoCStatus(hc, socThresholdLow, socThresholdHigh);
 
-                if (status === 'low') {
-                    fillColor = '#ef4444'; // Red
-                }
+                // If there is "something wrong" (Warning), maybe fill red? 
+                // User said "points should be black, if there is nothing wrong".
+                // Implies if wrong -> Non-Black.
+                // We'll stick to Red Ring for warning, but maybe Red Fill for visibility?
+                // For now, consistent Black Fill + Red Ring is cleaner. 
+                // Let's use Dept Color for Stroke to differentiate deps.
 
-                if (d.depth === 0) fillColor = colors.card; // Center Root is Card Color (or keep white/black?)
-                // Usually root is special. Previous logic made it card color.
-                // User asked dots to be black. Root isn't a "dot" usually, it's the center.
-                // Keeping root special to avoid visual black hole in center.
+                const deptName = d.data.data.department_name;
+                const deptColor = layoutData.deptColorMap?.get(deptName) || colors.border;
+
+                if (d.depth === 0) fillColor = colors.card;
 
                 ctx.fillStyle = fillColor;
                 ctx.fill();
 
                 // Border
                 ctx.lineWidth = 1.5 / transform.k;
-                ctx.strokeStyle = colors.background;
+                ctx.strokeStyle = deptColor; // Dept Color as Stroke
 
                 if (isHighlighted) {
                     ctx.strokeStyle = colors.primary;
