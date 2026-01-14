@@ -429,7 +429,8 @@ export const LayeredCircleView: React.FC = () => {
                 const status = getSoCStatus(headcount, socThresholdLow, socThresholdHigh);
 
                 if (status === 'high' || status === 'low') strokeColor = '#ef4444';
-                if (status === 'ok') strokeColor = '#000000'; // Black for OK links
+                if (status === 'ok') strokeColor = colors.border; // Gray for OK links
+
 
                 if (isInteracting) {
                     strokeColor = colors.border;
@@ -464,7 +465,8 @@ export const LayeredCircleView: React.FC = () => {
 
                         let strokeColor = colors.primary;
                         if (status === 'high' || status === 'low') strokeColor = '#ef4444';
-                        if (status === 'ok') strokeColor = '#000000'; // Black Highlight
+                        if (status === 'ok') strokeColor = colors.border; // Gray Highlight
+
 
                         ctx.strokeStyle = strokeColor;
                         ctx.beginPath();
@@ -506,13 +508,13 @@ export const LayeredCircleView: React.FC = () => {
 
                 // Ensure data.color is applied for nodes
                 // Node Color Logic: 
-                // 1. Fill = Black (as requested: "points should be black").
+                // 1. Fill = Black (as requested: "points white").
                 // 2. Stroke = Department Color (to solve "cant see diff between deps").
 
-                let fillColor = '#000000';
+                let fillColor = '#ffffff';
 
                 // If there is "something wrong" (Warning), maybe fill red? 
-                // User said "points should be black, if there is nothing wrong".
+                // User said "points white, if there is nothing wrong".
                 // Implies if wrong -> Non-Black.
                 // We'll stick to Red Ring for warning, but maybe Red Fill for visibility?
                 // For now, consistent Black Fill + Red Ring is cleaner. 
